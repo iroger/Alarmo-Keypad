@@ -7,6 +7,7 @@ Since there was no nice readily available keypad for the Alarmo integration in H
 - Supports Arm-Away / Arm-Night / Arm-Home
 - With chameleon function to scramble the keypad every time it is used
 - Works great with the Konnected alarm panel modules to build your own Home Alarm
+- Speakers used: 20mm version  https://a.aliexpress.com/_EGAeVFw
 
 Install:
 - create a new device in ESPHOME for your WT32-SC01 Plus
