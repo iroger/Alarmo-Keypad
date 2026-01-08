@@ -1,20 +1,20 @@
 # Alarmo-Keypad
 WT32-SC01 Plus Alarmo keypad for use in Home Assistant with some special sauce
-<p align="center">
-  <figure style="display:inline-block; text-align:center; margin:0 10px;">
-    <a href="./Pictures/panel.png">
-      <img src="./Pictures/panel.png" style="width:450px;height:300px;object-fit:cover;" />
-    </a>
-    <figcaption><em>Standard keypad layout</em></figcaption>
-  </figure>
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="./Pictures/panel.png" width="450" height="300" /><br/>
+      <em>Standard keypad layout</em>
+    </td>
+    <td align="center">
+      <img src="./Pictures/panel_chameleon.png" width="450" height="300" /><br/>
+      <em>Chameleon (scrambled) keypad</em>
+    </td>
+  </tr>
+</table>
 
-  <figure style="display:inline-block; text-align:center; margin:0 10px;">
-    <a href="./Pictures/panel_chameleon.png">
-      <img src="./Pictures/panel_chameleon.png" style="width:450px;height:300px;object-fit:cover;" />
-    </a>
-    <figcaption><em>Chameleon (scrambled) keypad</em></figcaption>
-  </figure>
-</p>
+
+
 
 
 
