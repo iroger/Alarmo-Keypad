@@ -34,4 +34,7 @@ Install:
 - copy the [alarm-panel.yaml](./alarm-panel.yaml) file in your newly created device but keep your unique api: encryption key
 - copy the [WAV files](./Audio/)  to the esphome folder
 - hit install in ESPHOME
+- after adding the alarm panel to your esphome devices in Home Assistant make sure to enable the "Allow the device to perform Home Assistant actions." setting
 - If needed tweak the settings in the substitutions section to suit your needs
+
+<img src="./Pictures/Screenshot.png"/>
