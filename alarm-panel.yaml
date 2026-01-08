@@ -64,7 +64,7 @@ globals:
 
 
 esphome:
-  name: "alarm-panel-hal"
+  name: ${device_name}
   on_boot:
     priority: 600
     then:
