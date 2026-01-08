@@ -27,6 +27,7 @@ Since there was no nice readily available keypad for the Alarmo integration in H
 - With chameleon function to scramble the keypad every time it is used
 - Works great with the [Konnected alarm panel](https://konnected.io/) to build your own Home Alarm
 - Speakers used 20mm version [Buy on AliExpress](https://a.aliexpress.com/_EGAeVFw)
+- A 3D file for a wall mounted housing is also available
 
 Install:
 - create a new device in ESPHOME for your WT32-SC01 Plus
