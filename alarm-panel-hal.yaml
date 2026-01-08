@@ -1,0 +1,879 @@
+# Alarm keypad for use with Alarmo integration in Home Assistant
+# MIT license
+# (C) 2026 iroger & tacoroumen
+# Used display: WT32-SC01 PLUS
+# Two speakers connected: one to the speaker output for the alarm sounds, the second to I/O connector pin 2 and 3 (GND and GPIO10) for keybeep
+# (WT32-SC01 PLUS is not stable while playing both alarm and keybeep samples via the mediaplayer, this will lead to frequent crashes)
+# Make sure to add your own encryption key in the api: section for secure communication with Home Assistant
+
+substitutions:
+  SCREEN_MAIN: master
+  device_name: "alarm-panel-hal"
+  friendly_name: Alarm Panel Hal
+  switch_id: "Alarm Panel"
+  alarm_panel_id: alarm_control_panel.alarmo  # Make sure to set this to your own Alarmo id
+  alarm_sound_volume: 80%                     # Set the alarm sounds volume
+  display_brightness: 75%                     # Set the display brightness
+  display_brightness_sleep: 30%               # Set the display brightness during sleep
+  chameleon_keys: 'true'                      # Enables the keyboard chameleon key shuffle mode
+
+#aray for keeping track of buttons
+globals:
+  - id: button_val_0
+    type: int
+    restore_value: no
+  - id: button_val_1
+    type: int
+    restore_value: no
+  - id: button_val_2
+    type: int
+    restore_value: no
+  - id: button_val_3
+    type: int
+    restore_value: no
+  - id: button_val_4
+    type: int
+    restore_value: no
+  - id: button_val_5
+    type: int
+    restore_value: no
+  - id: button_val_6
+    type: int
+    restore_value: no
+  - id: button_val_7
+    type: int
+    restore_value: no
+  - id: button_val_8
+    type: int
+    restore_value: no
+  - id: button_val_9
+    type: int
+    restore_value: no
+  - id: entered_pin
+    type: std::string
+    restore_value: no
+    initial_value: ""
+  - id: last_pressed_action   # Keep track of which arm button was pressed for blinking the right button during arming
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: blink_state           # toggle blink state during arming
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+
+esphome:
+  name: "alarm-panel-hal"
+  on_boot:
+    priority: 600
+    then:
+      - lambda: |-
+          srand(id(homeassistant_time).now().timestamp);    // Seed the random generator with the homeassistant time
+      - script.execute: shuffle_buttons    # Initialise the button layout
+      - media_player.volume_set: ${alarm_sound_volume}    # Set the alarm sound volume
+
+
+script:
+  # Initialise and shuffle the button layout
+  - id: shuffle_buttons
+    mode: restart
+    then:
+      - lambda: |-
+          int nums[10] = {0,1,2,3,4,5,6,7,8,9};
+
+          if (${chameleon_keys} == true) {
+            for (int i = 9; i > 0; i--) {
+              int j = rand() % (i + 1);
+              int tmp = nums[i];
+              nums[i] = nums[j];
+              nums[j] = tmp;
+            }
+          }
+          id(button_val_0) = nums[0];
+          id(button_val_1) = nums[1];
+          id(button_val_2) = nums[2];
+          id(button_val_3) = nums[3];
+          id(button_val_4) = nums[4];
+          id(button_val_5) = nums[5];
+          id(button_val_6) = nums[6];
+          id(button_val_7) = nums[7];
+          id(button_val_8) = nums[8];
+          id(button_val_9) = nums[9];
+
+          // Update button labels
+          lv_label_set_text(id(button_0_label), to_string(id(button_val_0)).c_str());
+          lv_label_set_text(id(button_1_label), to_string(id(button_val_1)).c_str());
+          lv_label_set_text(id(button_2_label), to_string(id(button_val_2)).c_str());
+          lv_label_set_text(id(button_3_label), to_string(id(button_val_3)).c_str());
+          lv_label_set_text(id(button_4_label), to_string(id(button_val_4)).c_str());
+          lv_label_set_text(id(button_5_label), to_string(id(button_val_5)).c_str());
+          lv_label_set_text(id(button_6_label), to_string(id(button_val_6)).c_str());
+          lv_label_set_text(id(button_7_label), to_string(id(button_val_7)).c_str());
+          lv_label_set_text(id(button_8_label), to_string(id(button_val_8)).c_str());
+          lv_label_set_text(id(button_9_label), to_string(id(button_val_9)).c_str());
+
+          ESP_LOGI("keypad", "Buttons shuffled!");
+
+  # Append a digit to the PIN buffer
+  - id: append_digit
+    parameters:
+      digit: int
+    then:
+      - lvgl.widget.show: button_X
+      - rtttl.play: 'beep:d=4,o=7,b=100:16e6'
+      - lambda: |-
+          id(entered_pin) += std::to_string(digit);
+          ESP_LOGI("keypad", "PIN so far: %s", id(entered_pin).c_str());
+
+  # Clear PIN buffer
+  - id: clear_pin
+    then:
+      - lvgl.widget.hide: button_X
+      - lambda: |-
+          id(entered_pin).clear();
+          ESP_LOGI("keypad", "PIN cleared");
+
+  # Check if the alarm is actually arming after arm button press, if not PIN was wrong or alarm sensor was blocking the arming
+  - id: check_arming
+    then:
+      - delay: 1200ms  # The arming state takes some time to update
+      - if:
+          condition:
+            # If after delay we are still disarmed, the code was likely wrong
+            lambda: 'return id(alarm_control_panel).state == "disarmed";'
+          then:
+            - media_player.speaker.play_on_device_media_file:
+                media_file: pin_error
+
+
+  # Submit PIN to HA alarmo
+  - id: submit_pin
+    parameters:
+      action: string   # expected: disarm, arm_home, arm_night, arm_away
+    then:
+      - lambda: 'id(last_pressed_action) = action;' # Save which button was clicked
+      - homeassistant.service:
+          service: !lambda |-
+            // Build the service name dynamically
+            return std::string("alarm_control_panel.alarm_") + action;
+          data:
+            entity_id: !lambda |-
+              return std::string("${alarm_panel_id}");
+            code: !lambda |-
+              return id(entered_pin);
+      - if:
+          condition: 
+            lambda: 'return id(last_pressed_action) != "disarm";' 
+          then:
+            - script.execute: check_arming
+      - script.execute: clear_pin
+
+esp32:
+  variant: esp32s3
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
+      CONFIG_ESP32S3_DATA_CACHE_64KB: y
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B:  y
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
+      CONFIG_SPIRAM_RODATA: y
+
+# Enable psram
+psram:
+  mode: quad
+  speed: 80MHZ
+
+# Enable logging
+logger:
+  level: ERROR
+
+# Enable Home Assistant API
+api:
+  #encryption:          # Make sure to add your own encryption key for secure communication with Home Assistant
+  #  key: xxxxxx
+  on_client_connected:
+    - lvgl.widget.hide: boot_screen
+    - lvgl.page.show: main_page
+
+ota:
+  platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: !secret wifi_domain
+  power_save_mode: none
+
+  ap:
+    ssid: !secret fallback_ssid
+    password: !secret fallback_password
+
+spi:
+  - type: octal
+    id: octal_spi
+    clk_pin: 47
+    data_pins:
+      - 9
+      - ignore_strapping_warning: true
+        number: 46
+      - ignore_strapping_warning: true
+        number: 3
+      - 8
+      - 18
+      - 17
+      - 16
+      - 15
+
+i2s_audio:
+  i2s_lrclk_pin: GPIO35
+  i2s_bclk_pin: GPIO36
+
+speaker:
+  - platform: i2s_audio
+    id: WT32_speaker
+    dac_type: external
+    i2s_dout_pin: GPIO37
+    buffer_duration: 500ms
+    sample_rate: 16000
+
+media_player:
+  - platform: speaker
+    name: "Speaker Media Player"
+    buffer_size: 16000
+    task_stack_in_psram: true
+    codec_support_enabled: false
+    id: speaker_media_player_id
+    announcement_pipeline:
+        speaker: WT32_speaker
+        format: WAV
+        num_channels: 1
+        sample_rate: 16000
+    files:
+      - id: alarm_arming
+        file: arming.wav
+      - id: alarm_pending
+        file: pending.wav
+      - id: alarm_armed
+        file: armed.wav
+      - id: alarm_disarmed
+        file: disarmed.wav
+      - id: pin_error
+        file: error.wav
+
+# I2C Configuration for Touch Panel
+i2c:
+  frequency: 400kHz
+  sda: GPIO6
+  scl: GPIO5
+  id: touch_i2c
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+
+interval:
+  - interval: 265ms   # Repeat the alarm_pending sample, should be slightly longer than the alarm_pending sound sample 
+    then:
+      - if:
+          condition: 
+            lambda: 'return id(alarm_control_panel).state == "pending";' 
+          then:
+            - wait_until:
+                not:
+                  media_player.is_announcing:
+            - media_player.speaker.play_on_device_media_file:
+                media_file: alarm_pending
+
+  - interval: 500ms # Blink the corresponding arm button while arming
+    then:
+      - if:
+          condition: 
+            lambda: 'return id(alarm_control_panel).state == "arming";' 
+          then:
+            - lambda: 'id(blink_state) = !id(blink_state);'
+            - lambda: |-
+                // Check which button was pressed and toggle its color
+                if (id(last_pressed_action) == "arm_away") {
+                  auto color = id(blink_state) ? lv_color_hex(0xCC0000) : lv_color_hex(0x440000);
+                  lv_obj_set_style_bg_color(id(arm_away_button), color, LV_PART_MAIN);
+                } else if (id(last_pressed_action) == "arm_night") {
+                  auto color = id(blink_state) ? lv_color_hex(0xe69138) : lv_color_hex(0x4c3012);
+                  lv_obj_set_style_bg_color(id(arm_night_button), color, LV_PART_MAIN);
+                } else if (id(last_pressed_action) == "arm_home") {
+                  auto color = id(blink_state) ? lv_color_hex(0xe69138) : lv_color_hex(0x4c3012);
+                  lv_obj_set_style_bg_color(id(arm_home_button), color, LV_PART_MAIN);
+                }
+
+  - interval: 1000ms # Repeat the alarm_arming sound every second
+    then:
+      - if:
+          condition: 
+            lambda: 'return id(alarm_control_panel).state == "arming";' 
+          then:
+            - wait_until:
+                not:
+                  media_player.is_announcing:
+            - media_player.speaker.play_on_device_media_file:
+                media_file: alarm_arming
+
+sensor:
+  - platform: uptime
+    type: seconds
+    id: uptimesensor           
+
+text_sensor:
+  # Import the alarmo state and set the display button colors accordingly
+  - platform: homeassistant
+    id: alarm_control_panel
+    entity_id: ${alarm_panel_id}
+    on_value:   # arming / pending / triggered / disarmed / armed_away / armed_home / armed_night 
+      then:
+        - if:
+            condition: 
+              lambda: 'return id(alarm_control_panel).state == "disarmed";' 
+            then:
+              - lvgl.widget.update:
+                  id: disarm_button
+                  bg_color: green
+              - lvgl.widget.update:
+                  id: arm_away_button
+                  bg_color: dark_red
+              - lvgl.widget.update:
+                  id: arm_night_button
+                  bg_color: dark_orange
+              - lvgl.widget.update:
+                  id: arm_home_button
+                  bg_color: dark_orange
+              - lambda: 'id(last_pressed_action) = "";' # Clear the last_pressed_action variable
+              - media_player.speaker.play_on_device_media_file: 
+                  media_file: alarm_disarmed
+        - if:
+            condition: 
+              lambda: 'return id(alarm_control_panel).state == "armed_away";' 
+            then:
+              - lvgl.widget.update:
+                  id: disarm_button
+                  bg_color: dark_green
+              - lvgl.widget.update:
+                  id: arm_away_button
+                  bg_color: red
+              - lvgl.widget.update:
+                  id: arm_night_button
+                  bg_color: dark_orange
+              - lvgl.widget.update:
+                  id: arm_home_button
+                  bg_color: dark_orange
+              - media_player.speaker.play_on_device_media_file: 
+                  media_file: alarm_armed
+        - if:
+            condition: 
+              lambda: 'return id(alarm_control_panel).state == "armed_night";' 
+            then:
+              - lvgl.widget.update:
+                  id: disarm_button
+                  bg_color: dark_green
+              - lvgl.widget.update:
+                  id: arm_away_button
+                  bg_color: dark_red
+              - lvgl.widget.update:
+                  id: arm_night_button
+                  bg_color: orange
+              - lvgl.widget.update:
+                  id: arm_home_button
+                  bg_color: dark_orange
+              - media_player.speaker.play_on_device_media_file: 
+                  media_file: alarm_armed
+        - if:
+            condition: 
+              lambda: 'return id(alarm_control_panel).state == "armed_home";' 
+            then:
+              - lvgl.widget.update:
+                  id: disarm_button
+                  bg_color: dark_green
+              - lvgl.widget.update:
+                  id: arm_away_button
+                  bg_color: dark_red
+              - lvgl.widget.update:
+                  id: arm_night_button
+                  bg_color: dark_orange
+              - lvgl.widget.update:
+                  id: arm_home_button
+                  bg_color: orange
+              - media_player.speaker.play_on_device_media_file: 
+                  media_file: alarm_armed
+        - lambda: |-
+            ESP_LOGI("alarm_control_panel", "State changed to: %s", id(alarm_control_panel).state.c_str());
+
+image:
+  # Import the esphome boot logo and arm / disarm icons
+  - file: https://esphome.io/favicon-512x512.png
+    id: boot_logo
+    resize: 120x120
+    type: RGB565
+    transparency: alpha_channel
+  - file: mdi:shield-home
+    id: arm_home_img
+    type: grayscale
+    resize: 50x50
+    transparency: alpha_channel
+  - file: mdi:shield-lock
+    id: arm_away_img
+    type: grayscale
+    resize: 50x50
+    transparency: alpha_channel
+  - file: mdi:shield-moon
+    id: arm_night_img
+    type: grayscale
+    resize: 50x50
+    transparency: alpha_channel
+  - file: mdi:shield-off
+    id: disarm_img
+    type: grayscale
+    resize: 50x50
+    transparency: alpha_channel
+  - file: mdi:backspace
+    id: clear_img
+    type: grayscale
+    resize: 45x45
+    transparency: alpha_channel
+
+color:
+  # Define display colors
+  - id: background
+    hex: 42495A
+  - id: button_default
+    hex: 5A6173
+  - id: button_pressed
+    hex: FBFBFB
+  - id: orange
+    hex: e69138
+  - id: dark_orange
+    hex: 4c3012
+  - id: red
+    hex: CC0000
+  - id: dark_red
+    hex: 440000
+  - id: green
+    hex: 6aa84f
+  - id: dark_green
+    hex: 23381a
+  - id: white
+    hex: ffffff
+
+lvgl:
+  buffer_size: 100%
+  displays:
+    - my_display
+  touchscreens:
+    - my_touch
+  on_idle:               # Set sleep mode on the display after 10s, dim the backlight brightness to 80%
+    timeout: 10s
+    then:
+      - light.turn_on:
+          id: screen_backlight
+          brightness: ${display_brightness_sleep}
+          transition_length: 5s
+  theme:
+    obj:
+      bg_color: background
+      text_color: 0xFFFFFF
+    button:
+      bg_color: button_default
+      border_width: 0
+      border_color: 0x00B6FF
+      radius: 20
+      shadow_width: 0
+      pressed:
+        bg_color: button_pressed
+
+    bar:
+      bg_color: 0x111111
+      text_color: 0xFFFFFF
+    dropdown:
+      bg_color: button_default
+      text_color: 0xFFFFFF
+      border_color: 0x00B6FF
+      border_width: 1
+      shadow_width: 0
+  top_layer:
+    widgets:
+    # Draw the boot screen
+    - obj:
+        id: boot_screen
+        x: 0
+        y: 0
+        width: 100%
+        height: 100%
+        bg_color: 0xffffff
+        bg_opa: COVER
+        radius: 0
+        pad_all: 0
+        border_width: 0
+        widgets:
+          - image:
+              src: boot_logo
+              align: CENTER
+              y: -40
+          - spinner:
+              align: CENTER
+              y: 95
+              height: 50
+              width: 50
+              spin_time: 1s
+              arc_length: 60deg
+              arc_width: 8
+              indicator:
+                arc_color: 0x18bcf2
+                arc_width: 8
+
+  pages:
+    # draw the buttons on the main_page
+    - id: main_page
+      bg_color: 0x303030
+      widgets:
+        - button:
+            id: arm_away_button
+            x: 370
+            y: 11
+            width: 100
+            height: 67
+            checkable: false
+            bg_color: dark_red
+            border_width: 3
+            border_color: red
+            widgets:
+              - image:
+                  align: CENTER
+                  src: arm_away_img
+                  image_recolor: white
+                  image_recolor_opa: 100%
+            on_press:
+              - script.execute:
+                  id: submit_pin
+                  action: "arm_away"
+              - script.execute: shuffle_buttons
+              - lambda: |-
+                  ESP_LOGI("keypad", "arm_away");
+
+        - button:
+            id: arm_night_button
+            x: 370
+            y: 88
+            width: 100
+            height: 67
+            checkable: false
+            bg_color: dark_orange
+            border_width: 3
+            border_color: orange
+            widgets:
+              - image:
+                  align: CENTER
+                  src: arm_night_img
+                  image_recolor: white
+                  image_recolor_opa: 10%
+            on_press:
+              - script.execute:
+                  id: submit_pin
+                  action: "arm_night"
+              - script.execute: shuffle_buttons
+              - lambda: |-
+                  ESP_LOGI("keypad", "arm_night");
+
+        - button:
+            id: arm_home_button
+            x: 370
+            y: 165
+            width: 100
+            height: 67
+            checkable: false
+            bg_color: dark_orange
+            border_width: 3
+            border_color: orange
+            widgets:
+              - image:
+                  align: CENTER
+                  src: arm_home_img
+                  image_recolor: white
+                  image_recolor_opa: 100%
+            on_press:
+              - script.execute:
+                  id: submit_pin
+                  action: "arm_home"
+              - script.execute: shuffle_buttons
+              - lambda: |-
+                  ESP_LOGI("keypad", "arm_home");
+
+        - button:
+            id: disarm_button
+            x: 370
+            y: 242
+            width: 100
+            height: 67
+            checkable: false
+            bg_color: dark_green
+            border_width: 3
+            border_color: green
+            widgets:
+              - image:
+                  align: CENTER
+                  src: disarm_img
+                  image_recolor: white
+                  image_recolor_opa: 100%
+            on_press:
+              - script.execute:
+                  id: submit_pin
+                  action: "disarm"
+              - script.execute: shuffle_buttons
+              - lambda: |-
+                  ESP_LOGI("keypad", "disarm");
+
+        # Keypad buttons
+        - button:
+            id: button_1
+            x: 10
+            y: 11
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_1_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_1));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_1);'
+
+
+        - button:
+            id: button_2
+            x: 130
+            y: 11
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_2_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_2));'
+                  text_font: montserrat_48
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_2);'
+
+        - button:
+            id: button_3
+            x: 250
+            y: 11
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_3_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_3));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_3);'
+
+        - button:
+            id: button_4
+            x: 10
+            y: 88
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_4_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_4));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_4);'
+
+        - button:
+            id: button_5
+            x: 130
+            y: 88
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_5_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_5));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_5);'
+        - button:
+            id: button_6
+            x: 250
+            y: 88
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_6_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_6));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_6);'
+
+        - button:
+            id: button_7
+            x: 10
+            y: 165
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_7_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_7));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_7);'
+
+        - button:
+            id: button_8
+            x: 130
+            y: 165
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_8_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_8));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_8);'
+
+        - button:
+            id: button_9
+            x: 250
+            y: 165
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_9_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_9));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_9);'
+
+        - button:
+            id: button_0
+            x: 130
+            y: 242
+            width: 110
+            height: 67
+            checkable: false
+            widgets:
+              - label:
+                  id: button_0_label
+                  align: center
+                  text: !lambda 'return to_string(id(button_val_0));'
+                  text_font: montserrat_48 
+            on_press:
+              - script.execute:
+                  id: append_digit
+                  digit: !lambda 'return id(button_val_0);'
+
+        - button:
+            id: button_X
+            x: 10
+            y: 242
+            width: 110
+            height: 67
+            checkable: false
+            hidden: true
+            widgets:
+              - image:
+                  align: CENTER
+                  src: clear_img
+                  image_recolor: !lambda return lv_color_hex(0xFFFFFF);
+                  image_recolor_opa: 100%
+            on_press:
+              - rtttl.play: 'beep:d=4,o=7,b=50:16e6'
+              - script.execute:
+                  id: clear_pin
+
+output:
+  # Speaker output for keybeep
+  - platform: ledc
+    pin: 
+      ignore_strapping_warning: true
+      number: GPIO45
+    id: lcd_backlight
+  - platform: ledc
+    pin: GPIO10
+    id: rtttl_out
+
+rtttl:
+  output: rtttl_out
+
+light:
+  # Screen backlight always on
+  - platform: monochromatic
+    output: lcd_backlight
+    id: screen_backlight
+    name: "Screen Backlight"
+    restore_mode: ALWAYS_ON
+
+display:
+# Settings for WT32-SC01 Plus
+  - platform: mipi_spi
+    model: wt32-sc01-plus
+    id: my_display
+    data_rate: 10MHz
+    rotation: 90
+    auto_clear_enabled: false
+    update_interval: never
+touchscreen:
+  - platform: ft63x6
+    id: my_touch
+    interrupt_pin: GPIO7
+    transform:
+      swap_xy: true
+      mirror_y: true
+      mirror_x: false
+    on_touch:
+      then:
+        - light.turn_on: 
+            id: screen_backlight
+            brightness: ${display_brightness}
+            transition_length: 0.1s
+#        - lvgl.widget.redraw:
+
