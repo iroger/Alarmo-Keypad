@@ -60,7 +60,7 @@ globals:
   - id: blink_state           # toggle blink state during arming
     type: bool
     restore_value: no
-    initial_value: "false"
+    initial_value: "true"
 
 
 esphome:
@@ -348,6 +348,9 @@ text_sensor:
                   id: arm_home_button
                   bg_color: dark_orange
               - lambda: 'id(last_pressed_action) = "";' # Clear the last_pressed_action variable
+              - wait_until:
+                  not:
+                    media_player.is_announcing:         
               - media_player.speaker.play_on_device_media_file: 
                   media_file: alarm_disarmed
         - if:
@@ -366,6 +369,9 @@ text_sensor:
               - lvgl.widget.update:
                   id: arm_home_button
                   bg_color: dark_orange
+                - wait_until:
+                  not:
+                    media_player.is_announcing:         
               - media_player.speaker.play_on_device_media_file: 
                   media_file: alarm_armed
         - if:
@@ -384,6 +390,9 @@ text_sensor:
               - lvgl.widget.update:
                   id: arm_home_button
                   bg_color: dark_orange
+                - wait_until:
+                  not:
+                    media_player.is_announcing:         
               - media_player.speaker.play_on_device_media_file: 
                   media_file: alarm_armed
         - if:
@@ -402,6 +411,9 @@ text_sensor:
               - lvgl.widget.update:
                   id: arm_home_button
                   bg_color: orange
+              - wait_until:
+                  not:
+                    media_player.is_announcing:         
               - media_player.speaker.play_on_device_media_file: 
                   media_file: alarm_armed
         - lambda: |-
