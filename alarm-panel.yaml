@@ -16,6 +16,7 @@ substitutions:
   display_brightness: 75%                     # Set the display brightness
   display_brightness_sleep: 30%               # Set the display brightness during sleep
   chameleon_keys: 'true'                      # Enables the keyboard chameleon key shuffle mode
+  display_rotation: "90"    # Change to 270 for 180° rotation from current orientation
 
 #aray for keeping track of buttons
 globals:
@@ -870,7 +871,7 @@ display:
     model: wt32-sc01-plus
     id: my_display
     data_rate: 10MHz
-    rotation: 90
+    rotation: ${display_rotation}
     auto_clear_enabled: false
     update_interval: never
 touchscreen:
@@ -879,8 +880,8 @@ touchscreen:
     interrupt_pin: GPIO7
     transform:
       swap_xy: true
-      mirror_y: true
-      mirror_x: false
+      mirror_y: !lambda "return ${display_rotation} != 270;"
+      mirror_x: !lambda "return ${display_rotation} == 270;"
     on_touch:
       then:
         - light.turn_on: 
