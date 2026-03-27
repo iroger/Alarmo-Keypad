@@ -13,10 +13,13 @@ substitutions:
   switch_id: "Alarm Panel"
   alarm_panel_id: alarm_control_panel.alarmo  # Make sure to set this to your own Alarmo id
   alarm_sound_volume: 80%                     # Set the alarm sounds volume
-  display_brightness: 75%                     # Set the display brightness
+  display_brightness: 85%                     # Set the display brightness
   display_brightness_sleep: 30%               # Set the display brightness during sleep
   chameleon_keys: 'true'                      # Enables the keyboard chameleon key shuffle mode
-  display_rotation: "90"    # Change to 270 for 180° rotation from current orientation
+  display_rotation: "90"                      # Change to 270 for 180° rotation from current orientation
+  touch_mirror_y: "true"                      # true when rotation != 270
+  touch_mirror_x: "false"                     # true when rotation == 270
+
 
 #aray for keeping track of buttons
 globals:
@@ -282,9 +285,9 @@ interval:
           condition: 
             lambda: 'return id(alarm_control_panel).state == "pending";' 
           then:
-            - wait_until:
-                not:
-                  media_player.is_announcing:
+          #  - wait_until:
+          #      not:
+          #        media_player.is_announcing:
             - media_player.speaker.play_on_device_media_file:
                 media_file: alarm_pending
 
@@ -319,6 +322,14 @@ interval:
                   media_player.is_announcing:
             - media_player.speaker.play_on_device_media_file:
                 media_file: alarm_arming
+      - if:
+          condition: 
+            lambda: 'return id(alarm_control_panel).state == "pending" || id(alarm_control_panel).state == "triggered";' 
+          then:
+            - light.turn_on: 
+                id: screen_backlight
+                brightness: ${display_brightness}
+                transition_length: 0.1s
 
 sensor:
   - platform: uptime
@@ -351,7 +362,8 @@ text_sensor:
               - lambda: 'id(last_pressed_action) = "";' # Clear the last_pressed_action variable
               - wait_until:
                   not:
-                    media_player.is_announcing:         
+                    media_player.is_announcing:
+              - delay: 250ms              
               - media_player.speaker.play_on_device_media_file: 
                   media_file: alarm_disarmed
         - if:
@@ -370,9 +382,10 @@ text_sensor:
               - lvgl.widget.update:
                   id: arm_home_button
                   bg_color: dark_orange
-                - wait_until:
+              - wait_until:
                   not:
-                    media_player.is_announcing:         
+                    media_player.is_announcing:       
+              - delay: 250ms              
               - media_player.speaker.play_on_device_media_file: 
                   media_file: alarm_armed
         - if:
@@ -391,9 +404,10 @@ text_sensor:
               - lvgl.widget.update:
                   id: arm_home_button
                   bg_color: dark_orange
-                - wait_until:
+              - wait_until:
                   not:
-                    media_player.is_announcing:         
+                    media_player.is_announcing:              
+              - delay: 250ms              
               - media_player.speaker.play_on_device_media_file: 
                   media_file: alarm_armed
         - if:
@@ -414,7 +428,8 @@ text_sensor:
                   bg_color: orange
               - wait_until:
                   not:
-                    media_player.is_announcing:         
+                    media_player.is_announcing:              
+              - delay: 250ms              
               - media_player.speaker.play_on_device_media_file: 
                   media_file: alarm_armed
         - lambda: |-
@@ -482,7 +497,7 @@ lvgl:
     - my_display
   touchscreens:
     - my_touch
-  on_idle:               # Set sleep mode on the display after 10s, dim the backlight brightness to 80%
+  on_idle:               # Set sleep mode on the display after 10s, dim the backlight brightness to sleep level
     timeout: 10s
     then:
       - light.turn_on:
@@ -880,8 +895,8 @@ touchscreen:
     interrupt_pin: GPIO7
     transform:
       swap_xy: true
-      mirror_y: !lambda "return ${display_rotation} != 270;"
-      mirror_x: !lambda "return ${display_rotation} == 270;"
+      mirror_y: ${touch_mirror_y}
+      mirror_x: ${touch_mirror_x}
     on_touch:
       then:
         - light.turn_on: 
