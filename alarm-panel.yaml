@@ -17,8 +17,6 @@ substitutions:
   display_brightness_sleep: 30%               # Set the display brightness during sleep
   chameleon_keys: 'true'                      # Enables the keyboard chameleon key shuffle mode
   display_rotation: "90"                      # Change to 270 for 180° rotation from current orientation
-  touch_mirror_y: "true"                      # true when rotation != 270
-  touch_mirror_x: "false"                     # true when rotation == 270
 
 
 #aray for keeping track of buttons
@@ -326,10 +324,11 @@ interval:
           condition: 
             lambda: 'return id(alarm_control_panel).state == "pending" || id(alarm_control_panel).state == "triggered";' 
           then:
-            - light.turn_on: 
-                id: screen_backlight
-                brightness: ${display_brightness}
-                transition_length: 0.1s
+            - lambda: 'lv_disp_trig_activity(NULL);'
+            #- light.turn_on: 
+            #    id: screen_backlight
+            #    brightness: ${display_brightness}
+            #    transition_length: 0.1s
 
 sensor:
   - platform: uptime
@@ -497,6 +496,7 @@ lvgl:
     - my_display
   touchscreens:
     - my_touch
+  rotation: ${display_rotation}
   on_idle:               # Set sleep mode on the display after 10s, dim the backlight brightness to sleep level
     timeout: 10s
     then:
@@ -886,17 +886,12 @@ display:
     model: wt32-sc01-plus
     id: my_display
     data_rate: 10MHz
-    rotation: ${display_rotation}
     auto_clear_enabled: false
     update_interval: never
 touchscreen:
   - platform: ft63x6
     id: my_touch
     interrupt_pin: GPIO7
-    transform:
-      swap_xy: true
-      mirror_y: ${touch_mirror_y}
-      mirror_x: ${touch_mirror_x}
     on_touch:
       then:
         - light.turn_on: 
