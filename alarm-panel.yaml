@@ -325,10 +325,10 @@ interval:
             lambda: 'return id(alarm_control_panel).state == "pending" || id(alarm_control_panel).state == "triggered";' 
           then:
             - lambda: 'lv_display_trigger_activity(NULL);'
-            #- light.turn_on: 
-            #    id: screen_backlight
-            #    brightness: ${display_brightness}
-            #    transition_length: 0.1s
+            - light.turn_on: 
+                id: screen_backlight
+                brightness: ${display_brightness}
+                transition_length: 0.1s
 
 sensor:
   - platform: uptime
