@@ -18,7 +18,11 @@ substitutions:
   chameleon_keys: 'true'                      # Enables the keyboard chameleon key shuffle mode
   display_rotation: "90"                      # Change to 270 for 180° rotation from current orientation
 
-
+external_components:                          # fix for invert_colors: true in esphome 2026.6.3
+  - source: github://pr#17247
+    components: [mipi_spi]
+    refresh: 1h  
+    
 #aray for keeping track of buttons
 globals:
   - id: button_val_0
@@ -194,14 +198,15 @@ logger:
 
 # Enable Home Assistant API
 api:
-  #encryption:          # Make sure to add your own encryption key for secure communication with Home Assistant
-  #  key: xxxxxx
+  encryption:
+    key: !secret api_key
   on_client_connected:
     - lvgl.widget.hide: boot_screen
     - lvgl.page.show: main_page
 
 ota:
-  platform: esphome
+  - platform: esphome
+    password: !secret ota_password
 
 wifi:
   ssid: !secret wifi_ssid
@@ -257,7 +262,7 @@ media_player:
       - id: alarm_arming
         file: arming.wav
       - id: alarm_pending
-        file: pending.wav
+        file: pending_double.wav
       - id: alarm_armed
         file: armed.wav
       - id: alarm_disarmed
@@ -277,15 +282,14 @@ time:
     id: homeassistant_time
 
 interval:
-  - interval: 265ms   # Repeat the alarm_pending sample, should be slightly longer than the alarm_pending sound sample 
+  - interval: 630ms   # Repeat the alarm_pending sample, should be slightly longer than the alarm_pending sound sample 
     then:
       - if:
           condition: 
             lambda: 'return id(alarm_control_panel).state == "pending";' 
           then:
-          #  - wait_until:
-          #      not:
-          #        media_player.is_announcing:
+            - wait_until:
+                lambda: 'return id(speaker_media_player_id)->state == media_player::MEDIA_PLAYER_STATE_IDLE;'
             - media_player.speaker.play_on_device_media_file:
                 media_file: alarm_pending
 
@@ -316,10 +320,10 @@ interval:
             lambda: 'return id(alarm_control_panel).state == "arming";' 
           then:
             - wait_until:
-                not:
-                  media_player.is_announcing:
+                lambda: 'return id(speaker_media_player_id)->state == media_player::MEDIA_PLAYER_STATE_IDLE;'
             - media_player.speaker.play_on_device_media_file:
                 media_file: alarm_arming
+                
       - if:
           condition: 
             lambda: 'return id(alarm_control_panel).state == "pending" || id(alarm_control_panel).state == "triggered";' 
@@ -360,10 +364,9 @@ text_sensor:
                   bg_color: dark_orange
               - lambda: 'id(last_pressed_action) = "";' # Clear the last_pressed_action variable
               - wait_until:
-                  not:
-                    media_player.is_announcing:
-              - delay: 250ms              
-              - media_player.speaker.play_on_device_media_file: 
+                  lambda: 'return id(speaker_media_player_id)->state == media_player::MEDIA_PLAYER_STATE_IDLE;'
+              - delay: 250ms
+              - media_player.speaker.play_on_device_media_file:
                   media_file: alarm_disarmed
         - if:
             condition: 
@@ -382,10 +385,9 @@ text_sensor:
                   id: arm_home_button
                   bg_color: dark_orange
               - wait_until:
-                  not:
-                    media_player.is_announcing:       
-              - delay: 250ms              
-              - media_player.speaker.play_on_device_media_file: 
+                  lambda: 'return id(speaker_media_player_id)->state == media_player::MEDIA_PLAYER_STATE_IDLE;'
+              - delay: 250ms
+              - media_player.speaker.play_on_device_media_file:
                   media_file: alarm_armed
         - if:
             condition: 
@@ -404,10 +406,9 @@ text_sensor:
                   id: arm_home_button
                   bg_color: dark_orange
               - wait_until:
-                  not:
-                    media_player.is_announcing:              
-              - delay: 250ms              
-              - media_player.speaker.play_on_device_media_file: 
+                  lambda: 'return id(speaker_media_player_id)->state == media_player::MEDIA_PLAYER_STATE_IDLE;'
+              - delay: 250ms
+              - media_player.speaker.play_on_device_media_file:
                   media_file: alarm_armed
         - if:
             condition: 
@@ -426,10 +427,9 @@ text_sensor:
                   id: arm_home_button
                   bg_color: orange
               - wait_until:
-                  not:
-                    media_player.is_announcing:              
-              - delay: 250ms              
-              - media_player.speaker.play_on_device_media_file: 
+                  lambda: 'return id(speaker_media_player_id)->state == media_player::MEDIA_PLAYER_STATE_IDLE;'
+              - delay: 250ms
+              - media_player.speaker.play_on_device_media_file:
                   media_file: alarm_armed
         - lambda: |-
             ESP_LOGI("alarm_control_panel", "State changed to: %s", id(alarm_control_panel).state.c_str());
