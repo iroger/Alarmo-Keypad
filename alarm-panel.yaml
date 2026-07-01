@@ -17,11 +17,7 @@ substitutions:
   display_brightness_sleep: 30%               # Set the display brightness during sleep
   chameleon_keys: 'true'                      # Enables the keyboard chameleon key shuffle mode
   display_rotation: "90"                      # Change to 270 for 180° rotation from current orientation
-
-external_components:                          # fix for invert_colors: true in esphome 2026.6.3
-  - source: github://pr#17247
-    components: [mipi_spi]
-    refresh: 1h  
+ 
     
 #aray for keeping track of buttons
 globals:
