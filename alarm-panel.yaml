@@ -16,9 +16,9 @@ substitutions:
   display_brightness: 85%                     # Set the display brightness
   display_brightness_sleep: 30%               # Set the display brightness during sleep
   chameleon_keys: 'true'                      # Enables the keyboard chameleon key shuffle mode
-  display_rotation: "90"                      # Change to 270 for 180° rotation from current orientation
- 
-    
+  display_rotation: "90"                      # Change to 270 for 180° rotation from current orientation  
+
+
 #aray for keeping track of buttons
 globals:
   - id: button_val_0
@@ -155,8 +155,8 @@ script:
       action: string   # expected: disarm, arm_home, arm_night, arm_away
     then:
       - lambda: 'id(last_pressed_action) = action;' # Save which button was clicked
-      - homeassistant.service:
-          service: !lambda |-
+      - homeassistant.action:
+          action: !lambda |-
             // Build the service name dynamically
             return std::string("alarm_control_panel.alarm_") + action;
           data:
@@ -195,14 +195,14 @@ logger:
 # Enable Home Assistant API
 api:
   encryption:
-    key: !secret api_key
+    key: !secret alarm-panel-hal__encryption_key
   on_client_connected:
     - lvgl.widget.hide: boot_screen
     - lvgl.page.show: main_page
 
 ota:
   - platform: esphome
-    password: !secret ota_password
+    encryption: 
 
 wifi:
   ssid: !secret wifi_ssid
@@ -247,7 +247,6 @@ media_player:
     name: "Speaker Media Player"
     buffer_size: 16000
     task_stack_in_psram: true
-    codec_support_enabled: false
     id: speaker_media_player_id
     announcement_pipeline:
         speaker: WT32_speaker
